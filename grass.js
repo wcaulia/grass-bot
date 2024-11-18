@@ -57,8 +57,8 @@ function center(text) {
 function showIntro() {
   console.log('\n');
   console.log(center("🌱 Grass Network 🌱").green.bold);
-  console.log(center("GitHub: nadiva-anggraini").cyan);
-  console.log(center("Link: github.com/nadiva-anggraini").cyan);
+  console.log(center("GitHub: Caulia Wilson").cyan);
+  console.log(center("Link: https://github.com/wcaulia").cyan);
 }
 
 function showHeader() {
@@ -140,6 +140,7 @@ class BotInstance {
 
   async directConnect(userID) {
     try {
+      const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
       const wsURL = `wss://${this.configuration.websocketHost}`;
       const wsClient = new WebSocketClient(wsURL, {
         headers: this.defaultHeaders(),

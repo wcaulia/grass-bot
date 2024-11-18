@@ -4,36 +4,16 @@ const WebSocketClient = require('ws');
 const request = require('axios');
 const moment = require('moment-timezone');
 const { v4: generateUUID } = require('uuid');
-const { SocksProxyAgent } = require('socks-proxy-agent');
-const { HttpsProxyAgent } = require('https-proxy-agent');
 require('colors');
 
 console.error = function () {};
 
 (async function initiate() {
-  showHeader();  
+  showHeader();
   await wait(1000);
   const configuration = new Configuration();
   const botInstance = new BotInstance(configuration);
-  const { proxyChoice } = await promptUser.prompt([
-    {
-      type: 'list',
-      name: 'proxyChoice',
-      message: 'Do you want to use or run with proxy?',
-      choices: ['Use Proxy', 'Without Proxy/Local network'],
-    },
-  ]);
-  let proxyList = [];
-  if (proxyChoice === 'Use Proxy') {
-    proxyList = await loadLines('proxy.txt');
-    if (proxyList.length === 0) {
-      console.error('Proxies not found...'.red);
-      return;
-    }
-    console.log(`Processing with ${proxyList.length} proxies, trying to filter the proxy and only connect with active proxy...`.cyan);
-  } else {
-    console.log('Connecting directly Without Proxy/Local network.'.cyan);
-  }
+
   const userIDList = await loadLines('userid.txt');
   if (userIDList.length === 0) {
     console.error('Account is not available in userid.txt'.red);
@@ -41,11 +21,8 @@ console.error = function () {};
   }
   console.log(`Detected total ${userIDList.length.toString().green} accounts, trying to connect...\n`.white);
 
-  const connectionTasks = userIDList.flatMap((userID) =>
-    proxyChoice === 'Use Proxy'
-      ? proxyList.map((proxy) => botInstance.proxyConnect(proxy, userID))
-      : [botInstance.directConnect(userID)]
-  );
+  // Only connect directly without proxy
+  const connectionTasks = userIDList.map(userID => botInstance.directConnect(userID));
   await Promise.all(connectionTasks);
 })().catch(console.error);
 
@@ -67,35 +44,27 @@ function showHeader() {
   console.log(center("Processing, please wait a moment...").cyan.bold);
   console.log('\n');
 }
+
 class BotInstance {
   constructor(configuration) {
     this.configuration = configuration;
     this.totalDataUsage = {};
   }
 
-  async proxyConnect(proxy, userID) {
+  // Only direct connect function is kept
+  async directConnect(userID) {
     try {
       const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
-      const formattedProxy = proxy.startsWith('socks5://')
-        ? proxy
-        : proxy.startsWith('http')
-        ? proxy
-        : `socks5://${proxy}`;
-      const proxyDetails = await this.fetchProxyIP(formattedProxy);
-      if (!proxyDetails) return;
-      const agent = formattedProxy.startsWith('http')
-        ? new HttpsProxyAgent(formattedProxy)
-        : new SocksProxyAgent(formattedProxy);
       const wsURL = `wss://${this.configuration.websocketHost}`;
       const wsClient = new WebSocketClient(wsURL, {
-        agent,
         headers: this.defaultHeaders(),
       });
+
       wsClient.on('open', () => {
-        console.log(`Connected to ${proxy}`.blue);
-        console.log(`Proxy IP: ${proxyDetails.ip.yellow}, Region: ${proxyDetails.region} ${proxyDetails.country}`.white);
-        this.sendPing(wsClient, proxyDetails.ip);
+        console.log(`Connect directly Without Proxy/Local network`.white);
+        this.sendPing(wsClient, 'Direct IP');
       });
+
       wsClient.on('message', (msg) => {
         const message = JSON.parse(msg);
         const dataUsage = msg.length;
@@ -103,7 +72,7 @@ class BotInstance {
           this.totalDataUsage[userID] = 0;
         }
         this.totalDataUsage[userID] += dataUsage;
-        
+
         if (message.action === 'AUTH') {
           const authResponse = {
             id: message.id,
@@ -121,66 +90,15 @@ class BotInstance {
           console.log(`Trying to send authentication for userID: ${authResponse.result.user_id.yellow}`.white);
         } else if (message.action === 'PONG') {
           const totalDataUsageKB = (this.totalDataUsage[userID] / 1024).toFixed(2);
-		  console.log(`${timezone} Received PONG for UserID: ${userID.green}, Used ${totalDataUsageKB.yellow} KB total packet data`.cyan);
+          console.log(`${timezone} Received PONG for UserID: ${userID.green}, Used ${totalDataUsageKB.yellow} KB total packet data`.cyan);
         }
       });
-      wsClient.on('close', (code, reason) => {
-        console.log(`WebSocket closed, error ${code} ${reason}`.red);
-        setTimeout(() => this.proxyConnect(proxy, userID), this.configuration.retryInterval);
-      });
 
-      wsClient.on('error', (error) => {
-        console.error(`Proxy: ${error.message}`.red);
-        wsClient.terminate();
-      });
-    } catch (error) {
-      console.error(`Proxy: ${error.message}`.red);
-    }
-  }
-
-  async directConnect(userID) {
-    try {
-      const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
-      const wsURL = `wss://${this.configuration.websocketHost}`;
-      const wsClient = new WebSocketClient(wsURL, {
-        headers: this.defaultHeaders(),
-      });
-      wsClient.on('open', () => {
-        console.log(`Connect directly Without Proxy/Local network`.white);
-        this.sendPing(wsClient, 'Direct IP');
-      });
-		wsClient.on('message', (msg) => {
-		const message = JSON.parse(msg);
-		const dataUsage = msg.length;
-		if (!this.totalDataUsage[userID]) {
-		this.totalDataUsage[userID] = 0;
-		}
-		this.totalDataUsage[userID] += dataUsage;
-	
-		if (message.action === 'AUTH') {
-			const authResponse = {
-			id: message.id,
-			origin_action: 'AUTH',
-			result: {
-				browser_id: generateUUID(),
-				user_id: userID,
-				user_agent: 'Mozilla/5.0',
-				timestamp: Math.floor(Date.now() / 1000),
-				device_type: 'desktop',
-				version: '4.28.2',
-			},
-			};
-			wsClient.send(JSON.stringify(authResponse));
-			console.log(`Trying to send authentication for userID: ${authResponse.result.user_id.yellow}`.white);
-		} else if (message.action === 'PONG') {
-			const totalDataUsageKB = (this.totalDataUsage[userID] / 1024).toFixed(2);
-			console.log(`${timezone} Received PONG for UserID: ${userID.green}, Used ${totalDataUsageKB.yellow} KB total packet data`.cyan);
-		}
-		});
       wsClient.on('close', (code, reason) => {
         console.log(`WebSocket closed, error ${code} ${reason}`.red);
         setTimeout(() => this.directConnect(userID), this.configuration.retryInterval);
       });
+
       wsClient.on('error', (error) => {
         console.error(`Error connecting to WebSocket`.red);
         wsClient.terminate();
@@ -215,29 +133,15 @@ class BotInstance {
       Browser: 'Mozilla',
     };
   }
-  async fetchProxyIP(proxy) {
-    const agent = proxy.startsWith('http')
-      ? new HttpsProxyAgent(proxy)
-      : new SocksProxyAgent(proxy);
-    try {
-      const response = await request.get(this.configuration.ipCheckURL, {
-        httpsAgent: agent,
-      });
-      console.log(`\x1b[92mConnected with proxy \x1b[32m${proxy}\x1b[0m`);
-      return response.data;
-    } catch (error) {
-      console.error(`Proxy error, skipping proxy ${proxy}`.yellow);
-      return null;
-    }
-  }
 }
+
 class Configuration {
   constructor() {
-    this.ipCheckURL = 'https://ipinfo.io/json';
-    this.websocketHost = 'proxy.wynd.network:4444';
-    this.retryInterval = 20000;
+    this.websocketHost = 'proxy.wynd.network:4444'; // You can change this to your desired WebSocket host
+    this.retryInterval = 20000;  // Time to retry if connection fails
   }
 }
+
 async function loadLines(filePath) {
   return new Promise((resolve, reject) => {
     fileSystem.readFile(filePath, 'utf8', (err, data) => {
@@ -248,6 +152,7 @@ async function loadLines(filePath) {
     });
   });
 }
+
 async function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }

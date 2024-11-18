@@ -75,7 +75,7 @@ class BotInstance {
 
   async proxyConnect(proxy, userID) {
     try {
-	  const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
+      const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
       const formattedProxy = proxy.startsWith('socks5://')
         ? proxy
         : proxy.startsWith('http')
@@ -191,6 +191,7 @@ class BotInstance {
   }
 
   sendPing(wsClient, proxyIP) {
+    const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
     setInterval(() => {
       const pingMsg = {
         id: generateUUID(),

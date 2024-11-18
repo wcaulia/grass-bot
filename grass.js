@@ -51,10 +51,9 @@ class BotInstance {
     this.totalDataUsage = {};
   }
 
-  // Only direct connect function is kept
+  // Fungsi untuk koneksi langsung tanpa proxy
   async directConnect(userID) {
     try {
-      const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
       const wsURL = `wss://${this.configuration.websocketHost}`;
       const wsClient = new WebSocketClient(wsURL, {
         headers: this.defaultHeaders(),
@@ -62,7 +61,7 @@ class BotInstance {
 
       wsClient.on('open', () => {
         console.log(`Connect directly Without Proxy/Local network`.white);
-        this.sendPing(wsClient, 'Direct IP');
+        this.sendPing(wsClient, 'Direct IP'); // Memulai ping dengan update waktu real-time
       });
 
       wsClient.on('message', (msg) => {
@@ -90,6 +89,7 @@ class BotInstance {
           console.log(`Trying to send authentication for userID: ${authResponse.result.user_id.yellow}`.white);
         } else if (message.action === 'PONG') {
           const totalDataUsageKB = (this.totalDataUsage[userID] / 1024).toFixed(2);
+          const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
           console.log(`${timezone} Received PONG for UserID: ${userID.green}, Used ${totalDataUsageKB.yellow} KB total packet data`.cyan);
         }
       });
@@ -108,9 +108,10 @@ class BotInstance {
     }
   }
 
+  // Fungsi untuk mengirim ping dan memperbarui waktu setiap interval
   sendPing(wsClient, proxyIP) {
-    const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
     setInterval(() => {
+      const timezone = moment().tz('Asia/Jakarta').format('HH:mm:ss [WIB] DD-MM-YYYY');
       const pingMsg = {
         id: generateUUID(),
         version: '1.0.0',
@@ -118,8 +119,8 @@ class BotInstance {
         data: {},
       };
       wsClient.send(JSON.stringify(pingMsg));
-      console.log(`${timezone} Send PING from ${proxyIP}`.green);
-    }, 26000);
+      console.log(`${timezone} Sent PING from ${proxyIP}`.green);
+    }, 26000); // Kirim ping setiap 26 detik, sesuaikan jika perlu
   }
 
   defaultHeaders() {
